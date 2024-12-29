@@ -74,17 +74,23 @@ public class Parallel {
     private static final int totalClients = 5;
     private static final Map<Integer, ReentrantLock> access = new ConcurrentHashMap<>();
     private static final MyList resultList = new MyList();
+    // lista pentru scorulrile -1 le gestionez inainte sa le adaug in queue
     private static final MyListBlack blackList = new MyListBlack();
     private static final MyQueue<Node> queue = new MyQueue<>();
+    //un map in care verifica daca tara a terminat sa isi trimite datele , cu val booleana pe false
     private static final Map<String, Boolean> finishedCountries = new HashMap<>(){
         @Override
         public Boolean get(Object key) {
             return super.getOrDefault(key, false); // Default false
         }
     };
-    private static final AtomicInteger countriesFinalResultLeft = new AtomicInteger(totalClients); // Countries that processed all
-    private static final AtomicInteger countriesLeft = new AtomicInteger(totalClients); // Countries left to process
-
+    //un contor pentru tarile care mai au de primit finalResult la cerere
+    private static final AtomicInteger countriesFinalResultLeft = new AtomicInteger(totalClients);
+    // Countries left to process (trimitere date pentru update)
+    private static final AtomicInteger countriesLeft = new AtomicInteger(totalClients);
+    /*
+    * Functie care afiseaza toate thread-urile si starea lor
+    */
     public static void printAllThreads() {
         Map<Thread, StackTraceElement[]> threads = Thread.getAllStackTraces();
         for (Map.Entry<Thread, StackTraceElement[]> entry : threads.entrySet()) {
@@ -99,15 +105,10 @@ public class Parallel {
 
     public static void main(String[] args) throws IOException, InterruptedException {
 
-        MyQueue<Node> synchronizedQueue = new MyQueue<>();
+       //creaza un aray de lockuri pentru participanti
         for (int i = 1; i < 449; ++i) {
             access.put(i, new ReentrantLock());
         }
-
-        // ExecutorService producerPool = Executors.newFixedThreadPool(p_r);
-//        ExecutorService consumerPool = Executors.newFixedThreadPool(p_w);
-//
-//        List<Future<?>> producerFutures = new ArrayList<>();
 
         Thread[] writersThreads = new Thread[p_w];
 
@@ -119,14 +120,14 @@ public class Parallel {
         long start_t = System.nanoTime();
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             System.out.println("Server started, listening on port " + PORT);
-
+            // proceseaza cererile atata timp cat mai am tari care nu au trimis cerere de final Result
             while (countriesFinalResultLeft.get() != 0) {
                 try {
                     final Socket clientSocket = serverSocket.accept();
                     System.out.println(countriesFinalResultLeft.get() + " countries left");
                     System.out.println("New client connected: " + clientSocket);
+                    //ClientHandler va procesa cererile clientilor
                     producer.submit(new ClientHandler(clientSocket));
-                    System.out.println("queue_size "+queue.size());
                     Thread.sleep(500);
                 } catch (IOException | InterruptedException e) {
                     System.err.println("Exception caught when trying to listen on port " + PORT + " or listening for a connection");
@@ -142,18 +143,6 @@ public class Parallel {
             System.err.println(e.getMessage());
         }
 
-
-
-//        for (Future<?> future : producerFutures) {
-//            try {
-//                future.get();
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//            }
-//        }
-//
-//        // Marchează că producătorii au terminat
-//        synchronizedQueue.setProducersFinished();
         printAllThreads();
         Arrays.stream(writersThreads).forEach(thread -> {
             try {
@@ -169,7 +158,7 @@ public class Parallel {
 
         System.out.println("Am ieșit toți");
 
-        printAllThreads();
+       // printAllThreads();
         resultList.sort();
         resultList.showList();
 
@@ -197,6 +186,7 @@ public class Parallel {
                 System.out.println("Received request: " + request.getRequestType());
 
                 try {
+                    //SCORE_UPDATE imi adauga cele primite in coada
                     if (request.getRequestType() == RequestType.SCORE_UPDATE) {
                         System.out.println("Processing SCORE_UPDATE request.");
                         var data = request.getData();
@@ -215,18 +205,22 @@ public class Parallel {
                         });
                         out.writeObject(new Response(ResponseType.SUCCESS, null));
                         out.flush();
-                    }  else if (request.getRequestType() == RequestType.FINAL_RESULT) {
+                    }  //la final result
+                    else if (request.getRequestType() == RequestType.FINAL_RESULT) {
                         System.out.println("Processing FINAL_RESULT request.");
-                        var country = request.getCountry();
+                        var country = request.getCountry();//iau country-ul care a primit request
                         System.out.println("Country: " + country);
-                        if (!finishedCountries.get(country)) {
+                        if (!finishedCountries.get(country)) {// verific daca nu e tara care si-a terminat deja cererile pt SCORE_UPDATE
+                            //si doar e la o incercare sa primeasca raspunsul final
                             System.out.println(country + " finished."+ finishedCountries.size()+" "+finishedCountries.get(country));
-                            countriesLeft.decrementAndGet();
-                            finishedCountries.put(country, true);
+                            countriesLeft.decrementAndGet();// scad numarul de tari care mai au de trimis date ca inseamna ca asta nu mai trimite Score_update Request
+                            finishedCountries.put(country, true);// o adaug in tarile cu care am terminat
                             System.out.println("Country " + country + " finished. Remaining countries: " + countriesLeft.get());
                         }
 
                         if (countriesLeft.get() == 0) {
+                            //verific daca toate tarile au terminat de trimis datele
+                            //trimit raspuns
                             countriesFinalResultLeft.decrementAndGet();
 //                            Future<Map<String, Integer>> futureResult = producer.submit(() -> {
 //                                Map<String, Integer> result = new HashMap<>();
@@ -276,65 +270,9 @@ public class Parallel {
             }
         }
     }
+    //writer-ul e exact ca in lab 5 ar trebui sa mearga
     public static class Writer extends Thread {
         @Override
-        public void run() {
-            try {
-                while (!queue.isEmpty() || !queue.isProducersFinished()) {
-                    Participant participant = null;
-                    Node node = null;
-                    try {
-                        node = queue.dequeue();
-                        if (node == null) {
-                            // Dacă node este null (coada este goală și producătorii au terminat)
-                            if (queue.isProducersFinished()) {
-                                break;
-                            }
-                        } else {
-                            participant = node.getData();
-                        }
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-
-                    if (participant == null) {
-                        continue;
-                    }
-
-                    System.out.println("Consumer processing participant: " + participant);
-
-                    access.get(participant.getId()).lock();
-
-                    if (!blackList.contains(new Pair(participant.getId(), participant.getCountry()))) {
-                        if (participant.getScore() == -1) {
-                            resultList.delete(participant);
-                            blackList.add(new Pair(participant.getId(), participant.getCountry()));
-                        } else {
-                            Node actual = resultList.update(participant);
-
-                            if (actual == null) {
-                                resultList.add(participant);
-                            }
-                        }
-                    }
-
-                    access.get(participant.getId()).unlock();
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    public static class Consumer {
-        MyQueue<Node> queue;
-        MyList list;
-
-        public Consumer(MyQueue<Node> queue, MyList list) {
-            this.queue = queue;
-            this.list = list;
-        }
-
         public void run() {
             try {
                 while (!queue.isEmpty() || !queue.isProducersFinished()) {
