@@ -13,8 +13,8 @@ public class MyQueue<T> {
     private boolean producersFinished = false;
     public void finish() {
         queueLock.lock();
-        notEmpty.signal();
-        notFull.signal();
+        notEmpty.signalAll();
+        notFull.signalAll();
         queueLock.unlock();
     }
     public void enqueue(T element) throws InterruptedException {

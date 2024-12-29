@@ -72,8 +72,6 @@ public class Parallel {
     static int p_w = 4;
     private static final ExecutorService producer = Executors.newFixedThreadPool(p_r);
     private static final int totalClients = 5;
-    private static final CountDownLatch allScoresSubmitted = new CountDownLatch(totalClients);
-    ExecutorService producerPool = Executors.newFixedThreadPool(p_r);
     private static final Map<Integer, ReentrantLock> access = new ConcurrentHashMap<>();
     private static final MyList resultList = new MyList();
     private static final MyListBlack blackList = new MyListBlack();
@@ -113,7 +111,7 @@ public class Parallel {
 
         Thread[] writersThreads = new Thread[p_w];
 
-        for (int i = 0; i < p_w; ++i) {
+        for (int i = 0; i < p_w; i++) {
             Thread thread = new Writer();
             writersThreads[i] = thread;
             thread.start();
@@ -156,9 +154,12 @@ public class Parallel {
 //
 //        // Marchează că producătorii au terminat
 //        synchronizedQueue.setProducersFinished();
+        printAllThreads();
         Arrays.stream(writersThreads).forEach(thread -> {
             try {
+                System.out.println("o sa dau join");
                 thread.join();
+
                 System.out.println("joined 1 writer thread");
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
@@ -227,22 +228,23 @@ public class Parallel {
 
                         if (countriesLeft.get() == 0) {
                             countriesFinalResultLeft.decrementAndGet();
-                            Future<Map<String, Integer>> futureResult = producer.submit(() -> {
-                                Map<String, Integer> result = new HashMap<>();
-                                //resultList.showList();
-                                resultList.sort();
-                                resultList.getItemsAsList().forEach(participant -> {
-                                    result.merge(participant.getCountry(), participant.getScore(), Integer::sum);
-                                });
-//
-                                return result;
-                            });
+//                            Future<Map<String, Integer>> futureResult = producer.submit(() -> {
+//                                Map<String, Integer> result = new HashMap<>();
+//                                //resultList.showList();
+//                                resultList.sort();
+//                                resultList.getItemsAsList().forEach(participant -> {
+//                                    result.merge(participant.getCountry(), participant.getScore(), Integer::sum);
+//                                });
+////
+//                                return result;
+//                            });
 
-
+                            resultList.sort();
                             List<Result> resul = resultList.showList();
                             out.writeObject(new Response(ResponseType.SUCCESS, resul));
                             out.flush();
                             queue.finish();
+                            queue.setProducersFinished();
                             System.out.println("Final result sent.");
                             System.out.println("Countries left: " + countriesFinalResultLeft.get());
                             if(countriesLeft.get() == 0) {
@@ -268,7 +270,7 @@ public class Parallel {
                     out.writeObject(new Response(ResponseType.FAILURE, null));
                     out.flush();
                 }
-                clientSocket.close();
+                //clientSocket.close();
             } catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
             }
