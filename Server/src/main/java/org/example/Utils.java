@@ -1,14 +1,19 @@
 package org.example;
 
-import java.io.BufferedWriter;
-import java.io.FileInputStream;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class Utils {
     public static boolean areFilesEqual(String filePath1, String filePath2) throws IOException {
+        File file1 = new File(filePath1);
+        File file2 = new File(filePath2);
+
+        if (!file1.exists() || !file2.exists()) {
+            return false;
+        }
+
         try (FileInputStream fileStream1 = new FileInputStream(filePath1);
              FileInputStream fileStream2 = new FileInputStream(filePath2)) {
 
@@ -54,11 +59,25 @@ public class Utils {
         List<Node> nodes = l.getElements();
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
             for (int i=1;i<nodes.size()-1;i++) {
-                writer.write(nodes.get(i).getData().getId() + "," + nodes.get(i).getData().getScore());
+                writer.write(nodes.get(i).getData().getId() + ", " + nodes.get(i).getData().getScore() + ", " + nodes.get(i).getData().getCountry());
                 writer.newLine();
             }
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    public static void writeMapToFile(Map<String, Integer> countryResult, String filePath) {
+        try {
+            BufferedWriter bw = new BufferedWriter(new FileWriter(filePath));
+
+            for (String key : countryResult.keySet()) {
+                bw.write("Country: " + key + " ; Score: " + countryResult.get(key));
+                bw.newLine();
+            }
+            bw.flush();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 }

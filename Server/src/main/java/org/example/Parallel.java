@@ -4,6 +4,7 @@ import org.example.*;
 import org.example.request.Request;
 import org.example.request.RequestType;
 import org.example.response.Response;
+import org.example.response.ResponseForCountry;
 import org.example.response.ResponseResult;
 import org.example.response.ResponseType;
 
@@ -68,8 +69,9 @@ class MyListBlack {
 
 public class Parallel {
     private static final int PORT = 50000;
-    static int p_r = 2;
-    static int p_w = 4;
+    private static final int p_r = 2;
+    private static final int p_w = 4;
+    private static final int dt = 2;
     private static final ExecutorService producer = Executors.newFixedThreadPool(p_r);
     private static final int totalClients = 5;
     private static final Map<Integer, ReentrantLock> access = new ConcurrentHashMap<>();
@@ -106,7 +108,7 @@ public class Parallel {
     public static void main(String[] args) throws IOException, InterruptedException {
 
        //creaza un aray de lockuri pentru participanti
-        for (int i = 1; i < 449; ++i) {
+        for (int i = 1; i < 599; ++i) {
             access.put(i, new ReentrantLock());
         }
 
@@ -163,6 +165,18 @@ public class Parallel {
         resultList.showList();
 
         Utils.writeResultParalell(resultList, "ResultParallel.txt");
+
+        Map<String, Integer> countryResult = new HashMap<>();
+        resultList.getItemsAsList().forEach(participant -> {
+            countryResult.merge(participant.getCountry(), participant.getScore(), Integer::sum);
+        });
+
+        Map<String, Integer> sortedCountryResult = new TreeMap<>((a, b) ->
+                countryResult.get(b).compareTo(countryResult.get(a)));
+        sortedCountryResult.putAll(countryResult);
+
+        Utils.writeMapToFile(sortedCountryResult, "CountryResult.txt");
+
         long end_t = System.nanoTime();
 
         assert (Utils.areFilesEqual("Result.txt", "ResultParallel.txt"));
@@ -176,6 +190,26 @@ public class Parallel {
 
         public ClientHandler(Socket clientSocket) {
             this.clientSocket = clientSocket;
+        }
+
+        private List<ResponseForCountry> getResult() throws ExecutionException, InterruptedException {
+            Future<Map<String, Integer>> futureResult = producer.submit(() -> {
+                Map<String, Integer> result = new HashMap<>();
+                resultList.getItemsAsList().forEach(participant ->
+                        result.merge(participant.getCountry(), participant.getScore(), Integer::sum));
+                return result;
+            });
+
+            Map<String, Integer> result = futureResult.get();
+            List<ResponseForCountry> list = new ArrayList<>();
+
+            result.forEach((country, score) -> {
+                list.add(new ResponseForCountry(score, country));
+            });
+            
+            list.sort((a, b) -> Integer.compare(b.getScore(), a.getScore()));
+
+            return list;
         }
 
         @Override
@@ -205,8 +239,24 @@ public class Parallel {
                         });
                         out.writeObject(new Response(ResponseType.SUCCESS, null));
                         out.flush();
-                    }  //la final result
-                    else if (request.getRequestType() == RequestType.FINAL_RESULT) {
+                    } else if (request.getRequestType() == RequestType.PARTIAL_RESULT){
+                        System.out.println("Processing PARTIAL_RESULT request.");
+                        long start = 0, end = dt;
+
+                        while (end - start >= dt){
+                            start = System.currentTimeMillis();
+                            var partialList = getResult();
+
+                            end = System.currentTimeMillis();
+
+                            if (end - start < dt) {
+                                out.writeObject(new Response(ResponseType.SUCCESS, partialList));
+                                out.flush();
+                                break;
+                            }
+                        }
+                    //la final result
+                    } else if (request.getRequestType() == RequestType.FINAL_RESULT) {
                         System.out.println("Processing FINAL_RESULT request.");
                         var country = request.getCountry();//iau country-ul care a primit request
                         System.out.println("Country: " + country);
@@ -222,20 +272,9 @@ public class Parallel {
                             //verific daca toate tarile au terminat de trimis datele
                             //trimit raspuns
                             countriesFinalResultLeft.decrementAndGet();
-//                            Future<Map<String, Integer>> futureResult = producer.submit(() -> {
-//                                Map<String, Integer> result = new HashMap<>();
-//                                //resultList.showList();
-//                                resultList.sort();
-//                                resultList.getItemsAsList().forEach(participant -> {
-//                                    result.merge(participant.getCountry(), participant.getScore(), Integer::sum);
-//                                });
-////
-//                                return result;
-//                            });
+                            var finalList = getResult();
 
-                            resultList.sort();
-                            List<Result> resul = resultList.showList();
-                            out.writeObject(new Response(ResponseType.SUCCESS, resul));
+                            out.writeObject(new Response(ResponseType.SUCCESS, finalList));
                             out.flush();
                             queue.finish();
                             queue.setProducersFinished();

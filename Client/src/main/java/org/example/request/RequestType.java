@@ -1,5 +1,5 @@
 package org.example.request;
 
 public enum RequestType {
-    FINAL_RESULT,SCORE_UPDATE
+    FINAL_RESULT,SCORE_UPDATE,PARTIAL_RESULT
 }

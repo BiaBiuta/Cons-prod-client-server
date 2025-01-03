@@ -7,13 +7,13 @@ import java.util.List;
 
 public class Response  implements Serializable {
     private ResponseType responseType;
-    List<Result> data;
+    List<ResponseForCountry> data;
 
-    public List<Result> getData() {
+    public List<ResponseForCountry> getData() {
         return data;
     }
 
-    public void setData(List<Result> data) {
+    public void setData(List<ResponseForCountry> data) {
         this.data = data;
     }
 
@@ -33,7 +33,7 @@ public class Response  implements Serializable {
         this.responseResultList = responseResultList;
     }
 
-    public Response(ResponseType responseType, List<Result> responseResultList) {
+    public Response(ResponseType responseType, List<ResponseForCountry> responseResultList) {
         this.responseType = responseType;
         this.data = responseResultList;
     }
