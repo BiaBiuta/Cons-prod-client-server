@@ -5,7 +5,7 @@ import org.example.request.Request;
 import org.example.request.RequestType;
 import org.example.response.Response;
 import org.example.response.ResponseForCountry;
-import org.example.response.ResponseResult;
+
 import org.example.response.ResponseType;
 
 import java.io.*;
@@ -273,8 +273,9 @@ public class Parallel {
                             //trimit raspuns
                             countriesFinalResultLeft.decrementAndGet();
                             var finalList = getResult();
-
-                            out.writeObject(new Response(ResponseType.SUCCESS, finalList));
+                            resultList.sort();
+                            List<Result> resul = resultList.showList();
+                            out.writeObject(new Response(ResponseType.SUCCESS, finalList,resul));
                             out.flush();
                             queue.finish();
                             queue.setProducersFinished();

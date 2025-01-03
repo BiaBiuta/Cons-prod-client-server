@@ -31,7 +31,7 @@ public class Main {
         System.out.println("Country code provided: " + countryCode);
 
         for (int j = 1; j <= 10; j++) {
-            files.add("/home/florin/FMI/P1/Client/src/main/resources/InputFile/" + "C" + countryCode + "_P" + j + ".txt");
+            files.add("C:\\Users\\bianc\\IdeaProjects\\ppd\\consumer-producer\\Client\\src\\main\\resources\\InputFile\\" + "C" + countryCode + "_P" + j + ".txt");
         }
         System.out.println("Files to process: " + files);
 
@@ -87,9 +87,14 @@ public class Main {
 
         if (finalRankingResponse != null && finalRankingResponse.getResponseType() == ResponseType.SUCCESS) {
             var data = finalRankingResponse.getData();
+            var data_result_participanti = finalRankingResponse.getData_result_participanti();
             System.out.println("Final Ranking:");
             for(var r : data) {
                 System.out.println(r.getCountry() + ", " + r.getScore());
+            }
+            System.out.println("Final Ranking for participants:");
+            for(var r : data_result_participanti) {
+                System.out.println(r.getId() + ", " + r.getScore());
             }
         } else {
             System.out.println("Max retries reached for final ranking");
