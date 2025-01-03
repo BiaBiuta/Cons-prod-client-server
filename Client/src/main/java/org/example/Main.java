@@ -3,6 +3,7 @@ package org.example;
 import org.example.request.Request;
 import org.example.request.RequestType;
 import org.example.response.Response;
+import org.example.response.ResponseForCountry;
 import org.example.response.ResponseType;
 
 import java.io.BufferedReader;
@@ -30,7 +31,7 @@ public class Main {
         System.out.println("Country code provided: " + countryCode);
 
         for (int j = 1; j <= 10; j++) {
-            files.add("C:\\Users\\bianc\\IdeaProjects\\ppd\\consumer-producer\\Client\\src\\main\\resources\\InputFile\\" + "C" + countryCode + "_P" + j + ".txt");
+            files.add("/home/florin/FMI/P1/Client/src/main/resources/InputFile/" + "C" + countryCode + "_P" + j + ".txt");
         }
         System.out.println("Files to process: " + files);
 
@@ -40,10 +41,10 @@ public class Main {
             try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    String[] parts = line.split(",");
+                    String[] parts = line.split(" ");
                     int firstNumber = Integer.parseInt(parts[0].trim());
                     int secondNumber = Integer.parseInt(parts[1].trim());
-                    buffer.add(new Result(firstNumber, secondNumber, ""));
+                    buffer.add(new Result(firstNumber, secondNumber, "C" + countryCode));
                     System.out.println("Added result to buffer: " + firstNumber + ", " + secondNumber);
 
                     if (buffer.size() == sendUnit) {
@@ -54,6 +55,15 @@ public class Main {
                         System.out.println("Buffer cleared after sending request");
                         Thread.sleep(dx * 1000);
                     }
+                }
+
+                Request request = new Request(RequestType.PARTIAL_RESULT, null, null);
+                Response response = sendRequestToServer(request);
+                assert response != null;
+                var data = response.getData();
+                System.out.println("Partial Ranking:");
+                for(var r : data) {
+                    System.out.println(r.getCountry() + ", " + r.getScore());
                 }
             } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
@@ -78,8 +88,8 @@ public class Main {
         if (finalRankingResponse != null && finalRankingResponse.getResponseType() == ResponseType.SUCCESS) {
             var data = finalRankingResponse.getData();
             System.out.println("Final Ranking:");
-            for(Result r : data) {
-                System.out.println(r.getId() + ", " + r.getCountryName() + ", " + r.getScore());
+            for(var r : data) {
+                System.out.println(r.getCountry() + ", " + r.getScore());
             }
         } else {
             System.out.println("Max retries reached for final ranking");
