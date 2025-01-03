@@ -16,6 +16,10 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 class Pair {
     public int id;
@@ -72,6 +76,7 @@ public class Parallel {
     private static final int p_r = 2;
     private static final int p_w = 4;
     private static final int dt = 2;
+    private static final Logger logger = Logger.getLogger(Parallel.class.getName());
     private static final ExecutorService producer = Executors.newFixedThreadPool(p_r);
     private static final int totalClients = 5;
     private static final Map<Integer, ReentrantLock> access = new ConcurrentHashMap<>();
@@ -106,6 +111,8 @@ public class Parallel {
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
+        configureLogger();
+        logger.info("Starting server...");
 
        //creaza un aray de lockuri pentru participanti
         for (int i = 1; i < 599; ++i) {
@@ -121,13 +128,13 @@ public class Parallel {
         }
         long start_t = System.nanoTime();
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-            System.out.println("Server started, listening on port " + PORT);
+            logger.info("Server started, listening on port " + PORT);
             // proceseaza cererile atata timp cat mai am tari care nu au trimis cerere de final Result
             while (countriesFinalResultLeft.get() != 0) {
                 try {
                     final Socket clientSocket = serverSocket.accept();
-                    System.out.println(countriesFinalResultLeft.get() + " countries left");
-                    System.out.println("New client connected: " + clientSocket);
+                    logger.info(countriesFinalResultLeft.get() + " countries left");
+                    logger.info("New client connected: " + clientSocket);
                     //ClientHandler va procesa cererile clientilor
                     producer.submit(new ClientHandler(clientSocket));
                     Thread.sleep(500);
@@ -151,7 +158,7 @@ public class Parallel {
                 System.out.println("o sa dau join");
                 thread.join();
 
-                System.out.println("joined 1 writer thread");
+                logger.info("joined 1 writer thread");
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -182,7 +189,14 @@ public class Parallel {
         assert (Utils.areFilesEqual("Result.txt", "ResultParallel.txt"));
 
         System.out.println("Execution time: " + (double) (end_t - start_t) / 1000000);
+        logger.info("Execution time: " + (double) (end_t - start_t) / 1000000);
         producer.shutdown();
+    }
+    private static void configureLogger() throws IOException {
+        FileHandler fileHandler = new FileHandler("logs/server.log", true);
+        fileHandler.setFormatter(new SimpleFormatter());
+        logger.addHandler(fileHandler);
+        logger.setLevel(Level.INFO);
     }
 
     static class ClientHandler implements Runnable {
@@ -217,12 +231,12 @@ public class Parallel {
             try (ObjectInputStream in = new ObjectInputStream(clientSocket.getInputStream()); ObjectOutputStream out = new ObjectOutputStream(clientSocket.getOutputStream())) {
 
                 Request request = (Request) in.readObject();
-                System.out.println("Received request: " + request.getRequestType());
+                logger.info("Received request: " + request.getRequestType()+" country= "+request.getCountry());
 
                 try {
                     //SCORE_UPDATE imi adauga cele primite in coada
                     if (request.getRequestType() == RequestType.SCORE_UPDATE) {
-                        System.out.println("Processing SCORE_UPDATE request.");
+                        logger.info("Processing SCORE_UPDATE request country= "+request.getCountry());
                         var data = request.getData();
                         data.forEach(result -> {
                             try {
@@ -240,7 +254,7 @@ public class Parallel {
                         out.writeObject(new Response(ResponseType.SUCCESS, null));
                         out.flush();
                     } else if (request.getRequestType() == RequestType.PARTIAL_RESULT){
-                        System.out.println("Processing PARTIAL_RESULT request.");
+                        logger.info("Processing PARTIAL_RESULT request country= "+request.getCountry());
                         long start = 0, end = dt;
 
                         while (end - start >= dt){
@@ -257,7 +271,7 @@ public class Parallel {
                         }
                     //la final result
                     } else if (request.getRequestType() == RequestType.FINAL_RESULT) {
-                        System.out.println("Processing FINAL_RESULT request.");
+                        logger.info("Processing FINAL_RESULT request country= "+request.getCountry());
                         var country = request.getCountry();//iau country-ul care a primit request
                         System.out.println("Country: " + country);
                         if (!finishedCountries.get(country)) {// verific daca nu e tara care si-a terminat deja cererile pt SCORE_UPDATE
@@ -265,7 +279,7 @@ public class Parallel {
                             System.out.println(country + " finished."+ finishedCountries.size()+" "+finishedCountries.get(country));
                             countriesLeft.decrementAndGet();// scad numarul de tari care mai au de trimis date ca inseamna ca asta nu mai trimite Score_update Request
                             finishedCountries.put(country, true);// o adaug in tarile cu care am terminat
-                            System.out.println("Country " + country + " finished. Remaining countries: " + countriesLeft.get());
+                            logger.info("Country " + country + " finished. Remaining countries: " + countriesLeft.get());
                         }
 
                         if (countriesLeft.get() == 0) {
@@ -279,16 +293,16 @@ public class Parallel {
                             out.flush();
                             queue.finish();
                             queue.setProducersFinished();
-                            System.out.println("Final result sent.");
-                            System.out.println("Countries left: " + countriesFinalResultLeft.get());
+                            logger.info("Final result sent country= "+request.getCountry());
+                            logger.info("Countries left: " + countriesFinalResultLeft.get());
                             if(countriesLeft.get() == 0) {
                                 System.out.println("All countries finished.");
                                 if (clientSocket != null && !clientSocket.isClosed()) {
                                     try {
                                         clientSocket.close();
-                                        System.out.println("Client socket closed.");
+                                        logger.info("Client socket closed.");
                                     } catch (IOException e) {
-                                        System.err.println("Error closing client socket: " + e.getMessage());
+                                        logger.severe("Error closing client socket: " + e.getMessage());
                                     }
                                 }
 
@@ -296,7 +310,7 @@ public class Parallel {
                         } else {
                             out.writeObject(new Response(ResponseType.FAILURE, null));
                             out.flush();
-                            System.out.println("Not all countries finished yet.");
+                            logger.info("Not all countries finished yet.");
                         }
                     }
                 } catch (Exception e) {

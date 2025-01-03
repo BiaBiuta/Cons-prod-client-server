@@ -14,30 +14,44 @@ import java.io.ObjectInputStream;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.*;
 
 public class Main {
+    private static final Logger logger = Logger.getLogger(Main.class.getName());
     //intervalul de timp delta x la care se trimit mesaje
+
     private static final int dx = 1;
     //cate trebuie sa trimita deodata un client
-    private static final int sendUnit = 20;
+    private static final int sendUnit = 7;
     private static final List<String> files = new ArrayList<>();
 
-    public static void main(String[] args) throws InterruptedException {
+
+    public static void main(String[] args) throws InterruptedException, IOException {
+        // Configurarea handler-ului pentru a vizualiza logurile în consolă
+//        ConsoleHandler consoleHandler = new ConsoleHandler();
+//        consoleHandler.setLevel(Level.ALL);  // Setăm nivelul de logare la ALL pentru a captura toate mesajele
+//        logger.addHandler(consoleHandler);
+
+        // Setarea nivelului de logare pentru logger
+        configureLogger();
+        logger.info("Starting server...");
+
+
         if (args.length < 1) {
-            System.out.println("You have to provide the country code");
+            logger.severe("You have to provide the country code");
             System.exit(1);
         }
         var countryCode = Integer.parseInt(args[0]);
-        System.out.println("Country code provided: " + countryCode);
+        logger.info("Country code provided: " + countryCode);
 
         for (int j = 1; j <= 10; j++) {
             files.add("C:\\Users\\bianc\\IdeaProjects\\ppd\\consumer-producer\\Client\\src\\main\\resources\\InputFile\\" + "C" + countryCode + "_P" + j + ".txt");
         }
-        System.out.println("Files to process: " + files);
+        logger.info("Files to process: " + files);
 
         List<Result> buffer = new ArrayList<>();
         for (String file : files) {
-            System.out.println("Reading file: " + file);
+            logger.info("Reading file: " + file);
             try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
@@ -45,19 +59,19 @@ public class Main {
                     int firstNumber = Integer.parseInt(parts[0].trim());
                     int secondNumber = Integer.parseInt(parts[1].trim());
                     buffer.add(new Result(firstNumber, secondNumber, "C" + countryCode));
-                    System.out.println("Added result to buffer: " + firstNumber + ", " + secondNumber);
+                    logger.info("Added result to buffer: " + firstNumber + ", " + secondNumber);
 
                     if (buffer.size() == sendUnit) {
-                        System.out.println("Sending request with buffer size: " + buffer.size());
-                        Request request = new Request(RequestType.SCORE_UPDATE, buffer, null);
+                        logger.info("Sending request with buffer size: " + buffer.size());
+                        Request request = new Request(RequestType.SCORE_UPDATE, buffer, file);
                         sendRequestToServer(request);
                         buffer.clear();
-                        System.out.println("Buffer cleared after sending request");
+                        logger.info("Buffer cleared after sending request");
                         Thread.sleep(dx * 1000);
                     }
                 }
 
-                Request request = new Request(RequestType.PARTIAL_RESULT, null, null);
+                Request request = new Request(RequestType.PARTIAL_RESULT, null, file);
                 Response response = sendRequestToServer(request);
                 assert response != null;
                 var data = response.getData();
@@ -70,13 +84,13 @@ public class Main {
             }
         }
 
-        System.out.println("Requesting final ranking for country code: " + countryCode);
+        logger.info("Requesting final ranking for country code: " + countryCode);
         Response finalRankingResponse;
         int maxRetries = 7;
         int retries = 0;
         do {
             finalRankingResponse = sendRequestToServer(new Request(RequestType.FINAL_RESULT, null, "C" + countryCode));
-            System.out.println("Attempt " + (retries + 1) + ": Received response for final ranking");
+            logger.info("Attempt " + (retries + 1) + ": Received response for final ranking");
 
             if (finalRankingResponse != null && finalRankingResponse.getResponseType() == ResponseType.SUCCESS) {
                 break;
@@ -108,14 +122,20 @@ public class Main {
              ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
             out.writeObject(request);
             out.flush();
-            System.out.println("Request sent, waiting for response...");
+            logger.info("Request sent, waiting for response...");
 
             Response response = (Response) in.readObject();
-            System.out.println("Received response from server: " + response.getResponseType());
+            logger.info("Received response from server: " + response.getResponseType());
             return response;
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
         return null;
+    }
+    private static void configureLogger() throws IOException {
+        FileHandler fileHandler = new FileHandler("logs/server.log", true);
+        fileHandler.setFormatter(new SimpleFormatter());
+        logger.addHandler(fileHandler);
+        logger.setLevel(Level.INFO);
     }
 }
